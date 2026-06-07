@@ -32,7 +32,7 @@ celery_app.conf.beat_schedule = {
     # Retrain the surge ML model every 6 hours
     "retrain-surge-model-every-6h": {
         "task":     "app.worker.tasks.retrain_surge_model_task",
-        "schedule": crontab(minute="*"),
+        "schedule": crontab(minute=0, hour="*/6"),
     },
     # Scan for active surges and send FCM alerts every 5 minutes
     "scan-active-surges-every-5min": {
