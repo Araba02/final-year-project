@@ -174,13 +174,27 @@ def create_app() -> FastAPI:
     app.add_middleware(SlowAPIMiddleware)
 
     # ── CORS ──────────────────────────────────────────────────────────────────
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=[str(o) for o in settings.BACKEND_CORS_ORIGINS] or ["*"],
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
+    # In development we allow any origin so the Expo web client works on
+    # whatever port Metro picks (8081, 19006, …) without re-configuring.
+    # Auth is Bearer-token based (no cookies), so credentialed CORS isn't
+    # needed — which lets us use the "*" wildcard. Production uses the
+    # explicit allow-list from BACKEND_CORS_ORIGINS with credentials enabled.
+    if settings.APP_ENV == "development":
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=["*"],
+            allow_credentials=False,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
+    else:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=[str(o) for o in settings.BACKEND_CORS_ORIGINS] or ["*"],
+            allow_credentials=True,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
 
     # ── Mobile API key auth ───────────────────────────────────────────────────
     app.add_middleware(APIKeyMiddleware)
