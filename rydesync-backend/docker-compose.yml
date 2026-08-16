@@ -1,0 +1,126 @@
+version: "3.9"
+
+# ──────────────────────────────────────────────────────────────────────────────
+# RideSync+ — Full local development stack
+#
+# Services:
+#   postgres    — Primary database
+#   redis       — Cache + Celery broker/backend
+#   api         — FastAPI application (hot-reload in dev)
+#   worker      — Celery task worker
+#   beat        — Celery periodic task scheduler
+# ──────────────────────────────────────────────────────────────────────────────
+
+services:
+
+  # ── PostgreSQL ──────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-ridesync}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ridesync_dev_password}
+      POSTGRES_DB: ${POSTGRES_DB:-ridesync_db}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ridesync}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Redis ───────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── FastAPI Application ─────────────────────────────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      POSTGRES_SERVER: postgres
+      REDIS_HOST: redis
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - .:/app                      # Hot-reload: mount source in dev
+    command: >
+      sh -c "alembic upgrade head &&
+             uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  # ── Celery Worker ────────────────────────────────────────────────────────────
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      POSTGRES_SERVER: postgres
+      REDIS_HOST: redis
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+    depends_on:
+      - api
+    volumes:
+      - .:/app
+    command: >
+      celery -A app.worker.celery_app worker
+      --loglevel=info
+      --concurrency=2
+      --queues=celery
+
+  # ── Celery Beat (Scheduler) ──────────────────────────────────────────────────
+  beat:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      POSTGRES_SERVER: postgres
+      REDIS_HOST: redis
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+    depends_on:
+      - worker
+    volumes:
+      - .:/app
+    command: >
+      celery -A app.worker.celery_app beat
+      --loglevel=info
+      --schedule=/tmp/celerybeat-schedule
+
+volumes:
+  postgres_data:
+  redis_data:

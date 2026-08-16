@@ -12,7 +12,11 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "RideSync+ uses your location to show nearby rides and auto-fill your pickup address.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "RideSync+ uses your location to show nearby rides and auto-fill your pickup address."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -24,6 +28,14 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-secure-store"
+    ],
+    "extra": {
+      "apiBaseUrl": "",
+      "apiKey": "",
+      "requestTimeoutMs": 15000
     }
   }
 }
